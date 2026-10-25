@@ -11,7 +11,7 @@ import pathlib
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent
-DATA = ROOT / 'data' / 'sample_markets.json'
+DATA = ROOT /  'sample_markets.json'
 REPORT = ROOT / 'reports' / 'latest.md'
 
 ROLES = {
