@@ -21,6 +21,8 @@ jobs:
         run: python live_data.py
       - name: Scan market quotes
         run: python market_scanner.py
+      - name: Sample order-book depth
+        run: python orderbook_depth.py
       - name: Upload research reports
         uses: actions/upload-artifact@v4
         with:
@@ -30,3 +32,4 @@ jobs:
             reports/live_markets.json
             reports/market_scan.json
             reports/market_scan.md
+            reports/orderbook_depth.json
