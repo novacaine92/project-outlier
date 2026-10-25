@@ -8,7 +8,7 @@ import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent
 BASE = 'https://external-api.kalshi.com/trade-api/v2/markets'
-MAX_PAGES = 12
+MAX_PAGES = 20
 PAGE_SIZE = 100
 
 
@@ -21,12 +21,12 @@ def cents(value):
 
 
 def fetch_page(cursor=None):
-    params = {'status': 'open', 'limit': PAGE_SIZE}
+    params = {'status': 'open', 'limit': PAGE_SIZE, 'mve_filter': 'exclude'}
     if cursor:
         params['cursor'] = cursor
     url = BASE + '?' + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={
-        'User-Agent': 'ProjectOutlierResearch/0.3',
+        'User-Agent': 'ProjectOutlierResearch/0.4',
         'Accept': 'application/json',
     })
     with urllib.request.urlopen(req, timeout=30) as response:
@@ -53,21 +53,25 @@ def scan():
     return markets
 
 
-def analyze(markets):
+def analyze(markets, diagnostics=None):
     rows = []
     seen = set()
+    reasons = {'missing_or_duplicate_ticker': 0, 'combination_contract': 0, 'missing_or_invalid_bid': 0, 'zero_or_boundary_bid': 0, 'crossed_quote': 0, 'accepted': 0}
     for m in markets:
         ticker = m.get('ticker')
         if not ticker or ticker in seen:
+            reasons['missing_or_duplicate_ticker'] += 1
             continue
         seen.add(ticker)
         title = m.get('title') or ''
         # Exclude explicitly cross-category combination contracts.
         if 'CROSSCATEGORY' in ticker.upper() or title.lower().count('yes ') >= 3:
+            reasons['combination_contract'] += 1
             continue
         yb = cents(m.get('yes_bid_dollars'))
         nb = cents(m.get('no_bid_dollars'))
         if yb is None or nb is None:
+            reasons['missing_or_invalid_bid'] += 1
             continue
         # For a binary contract, opposing bid implies a potential ask price.
         # These are indicative only, NOT verified executable asks.
@@ -76,9 +80,12 @@ def analyze(markets):
         yes_spread = round(implied_yes_ask - yb, 2)
         no_spread = round(implied_no_ask - nb, 2)
         if not (0 < yb < 100 and 0 < nb < 100):
+            reasons['zero_or_boundary_bid'] += 1
             continue
         if yes_spread < 0 or no_spread < 0:
+            reasons['crossed_quote'] += 1
             continue
+        reasons['accepted'] += 1
         rows.append({
             'ticker': ticker,
             'title': title,
@@ -92,12 +99,15 @@ def analyze(markets):
             'open_interest': m.get('open_interest'),
         })
     rows.sort(key=lambda r: (r['indicative_spread_cents'], -(float(r['volume'] or 0))))
+    if diagnostics is not None:
+        diagnostics.update(reasons)
     return rows
 
 
 def main():
     markets = scan()
-    candidates = analyze(markets)
+    diagnostics = {}
+    candidates = analyze(markets, diagnostics)
     out = ROOT / 'reports'
     out.mkdir(exist_ok=True)
     snapshot = {
@@ -105,15 +115,19 @@ def main():
         'retrieved_at_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
         'raw_market_count': len(markets),
         'filtered_quote_count': len(candidates),
+        'discovery_filter': 'mve_filter=exclude (request non-combination markets)',
+        'rejection_reasons': diagnostics,
         'disclaimer': 'Indicative bid-derived spreads only; no order book depth, fees, or execution verified.',
         'candidates': candidates,
     }
     (out / 'market_scan.json').write_text(json.dumps(snapshot, indent=2))
     lines = [
-        '# Project Outlier v0.3: Read-only market scan', '',
+        '# Project Outlier v0.4: Read-only market scan', '',
         f"Retrieved: {snapshot['retrieved_at_utc']}",
         f"Raw market records: {len(markets)}",
         f"Filtered quote candidates: {len(candidates)}", '',
+        '## Filter diagnostics', '',
+        *[f'- {key.replace("_", " ")}: {value}' for key, value in diagnostics.items()], '',
         '**Not an arbitrage report.** Opposing bids imply potential asks, but are not executable quotes.',
         'Order-book depth, fees, contract equivalence, and liquidity remain unverified.', '',
         '| Ticker | YES bid | NO bid | Implied YES ask | Spread |',
