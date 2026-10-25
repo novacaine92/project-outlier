@@ -1,0 +1,5 @@
+[
+  {"event":"SYNTHETIC: Central bank decision scenario A", "yes_price":0.43, "no_price":0.51, "estimated_fees":0.02, "rules_verified":false, "executable_quotes_verified":false, "jurisdiction_verified":false},
+  {"event":"SYNTHETIC: Economic release scenario B", "yes_price":0.58, "no_price":0.44, "estimated_fees":0.02, "rules_verified":false, "executable_quotes_verified":false, "jurisdiction_verified":false},
+  {"event":"SYNTHETIC: Economic release scenario C", "yes_price":0.36, "no_price":0.60, "estimated_fees":0.03, "rules_verified":false, "executable_quotes_verified":false, "jurisdiction_verified":false}
+]
