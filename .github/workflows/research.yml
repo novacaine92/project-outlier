@@ -1,4 +1,12 @@
-name: Outlier Research Test
+      - name: Collect real market data
+        run: python live_data.py
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: outlier-research-report
+          path: |
+            reports/latest.md
+            reports/live_markets.jsonname: Outlier Research Test
 on:
   workflow_dispatch:
 
