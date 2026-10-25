@@ -67,7 +67,7 @@ def fetch_book(ticker):
     })
     with urllib.request.urlopen(req, timeout=20) as response:
         data = json.load(response)
-    return data.get("orderbook", {})
+    return data.get("orderbook_fp") or data.get("orderbook") or {"_diagnostic_keys": list(data.keys())}
 
 
 def main():
@@ -80,7 +80,11 @@ def main():
     for candidate in candidates[:MAX_BOOKS]:
         ticker = candidate["ticker"]
         try:
-            detail = evaluate(fetch_book(ticker))
+            book = fetch_book(ticker)
+            detail = evaluate(book)
+            detail["book_keys"] = sorted(book.keys())
+            detail["yes_levels"] = len(levels(book, "yes"))
+            detail["no_levels"] = len(levels(book, "no"))
         except Exception as exc:
             # Retain errors rather than silently treating missing data as zero liquidity.
             detail = {"status": "fetch_error", "error_type": type(exc).__name__}
