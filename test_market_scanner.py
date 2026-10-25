@@ -55,6 +55,24 @@ class ScannerTests(unittest.TestCase):
         ])
         self.assertEqual([r['ticker'] for r in rows], ['LARGE', 'SMALL', 'WIDE'])
 
+    def test_rejection_diagnostics(self):
+        reasons = {}
+        rows = scanner.analyze([
+            market('CROSSCATEGORY-A', '0.40', '0.50'),
+            market('MISSING', None, '0.50'),
+            market('ZERO', '0', '0.50'),
+            market('CROSSED', '0.70', '0.40'),
+            market('GOOD', '0.40', '0.50'),
+            market('GOOD', '0.40', '0.50'),
+        ], reasons)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(reasons['combination_contract'], 1)
+        self.assertEqual(reasons['missing_or_invalid_bid'], 1)
+        self.assertEqual(reasons['zero_or_boundary_bid'], 1)
+        self.assertEqual(reasons['crossed_quote'], 1)
+        self.assertEqual(reasons['missing_or_duplicate_ticker'], 1)
+        self.assertEqual(reasons['accepted'], 1)
+
     @patch.object(scanner.time, 'sleep')
     @patch.object(scanner, 'fetch_page')
     def test_pagination(self, fetch, sleep):
