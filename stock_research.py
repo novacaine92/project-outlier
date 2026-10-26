@@ -12,6 +12,7 @@ import pathlib
 import statistics
 import urllib.parse
 import urllib.request
+from stock_validation import validate
 
 ROOT = pathlib.Path(__file__).resolve().parent
 TICKERS = ("AAPL", "MSFT", "NVDA", "AMD", "MU", "SPY", "QQQ", "XLI", "JPM", "CAT")
@@ -29,11 +30,11 @@ def fetch_yahoo_history(ticker):
     result = payload["chart"]["result"][0]
     quotes = result["indicators"]["quote"][0]
     rows = []
-    for stamp, close, volume in zip(result["timestamp"], quotes["close"], quotes["volume"]):
+    for stamp, close, volume, opening in zip(result["timestamp"], quotes["close"], quotes["volume"], quotes["open"]):
         if close is None or volume is None or not math.isfinite(float(close)) or float(close) <= 0:
             continue
         day = dt.datetime.fromtimestamp(stamp, dt.timezone.utc).date().isoformat()
-        rows.append({"date": day, "close": float(close), "volume": float(volume)})
+        rows.append({"date": day, "close": float(close), "volume": float(volume), "open": float(opening) if opening is not None else None})
     return sorted({r["date"]: r for r in rows}.values(), key=lambda r: r["date"])
 
 
@@ -52,7 +53,7 @@ def fetch_history(ticker):
             close = float(row["Close"])
             volume = float(row["Volume"])
             if math.isfinite(close) and close > 0 and math.isfinite(volume) and volume >= 0:
-                rows.append({"date": day.isoformat(), "close": close, "volume": volume})
+                rows.append({"date": day.isoformat(), "close": close, "volume": volume, "open": float(row["Open"])})
         except (KeyError, ValueError, TypeError):
             continue
     return sorted({r["date"]: r for r in rows}.values(), key=lambda r: r["date"])
@@ -143,6 +144,7 @@ def main():
             output["symbols"][ticker] = {
                 "status": "ok", "source": source, "bars": len(bars), "last_bar_date": bars[-1]["date"],
                 "last_close": bars[-1]["close"], "summary": summarize(events),
+                "validation": validate(bars, events),
                 "recent_historical_signals": [
                     {k: v for k, v in e.items() if k != "index"} for e in events[-5:]
                 ],
@@ -168,6 +170,7 @@ def main():
         lines.append(f"| {ticker} | {item['bars']} | {a['nonoverlapping_samples']} | {fmt(a['average_net_return'])} | {b['nonoverlapping_samples']} | {fmt(b['average_net_return'])} |")
     lines += ["", "Signal-day close is used as a hypothetical entry, which can introduce execution bias.",
               "Historical returns are not proof of a repeatable edge. See JSON for caveats.", ""]
+    lines += ["", "## Next-open chronological holdout validation", "", "See JSON validation for 70/30 split, sample sizes, and performance. Legacy table above is biased by same-close entries.", ""]
     (folder / "stock_research.md").write_text("\n".join(lines))
     print("Stock research complete:", {k: v["status"] for k, v in output["symbols"].items()})
     if not output["data_quality_passed"]:
