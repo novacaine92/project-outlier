@@ -15,7 +15,11 @@ import urllib.request
 from stock_validation import validate
 
 ROOT = pathlib.Path(__file__).resolve().parent
-TICKERS = ("AAPL", "MSFT", "NVDA", "AMD", "MU", "SPY", "QQQ", "XLI", "JPM", "CAT")
+def load_universe(path=ROOT / "stock_universe.json"):
+    data = json.loads(path.read_text())
+    return [(ticker, sector) for sector, tickers in data["sectors"].items() for ticker in tickers]
+
+TICKERS = tuple(ticker for ticker, _ in load_universe())
 LOOKBACK = 20
 HORIZON = 5
 ROUNDTRIP_COST = 0.002  # illustrative 20 basis points, not a broker quote
@@ -127,16 +131,18 @@ def main():
         ],
         "symbols": {},
     }
+    output["universe_size"] = len(TICKERS)
+    output["sectors"] = {ticker: sector for ticker, sector in load_universe()}
     for ticker in TICKERS:
         try:
-            source = 'Stooq'
+            source = 'Yahoo chart'
             try:
-                bars = fetch_history(ticker)
-                if len(bars) < LOOKBACK + HORIZON + 1:
-                    raise ValueError('Insufficient Stooq history')
-            except Exception:
-                source = 'Yahoo chart fallback'
                 bars = fetch_yahoo_history(ticker)
+                if len(bars) < LOOKBACK + HORIZON + 1:
+                    raise ValueError('Insufficient Yahoo history')
+            except Exception:
+                source = 'Stooq fallback'
+                bars = fetch_history(ticker)
             if len(bars) < LOOKBACK + HORIZON + 1:
                 output["symbols"][ticker] = {"status": "insufficient_history", "bars": len(bars)}
                 continue
@@ -152,7 +158,7 @@ def main():
         except Exception as exc:
             output["symbols"][ticker] = {"status": "data_error", "error_type": type(exc).__name__}
     output["usable_symbols"] = sum(v["status"] == "ok" for v in output["symbols"].values())
-    output["data_quality_passed"] = output["usable_symbols"] >= 3
+    output["data_quality_passed"] = output["usable_symbols"] >= int(len(TICKERS) * 0.75)
     folder = ROOT / "reports"
     folder.mkdir(exist_ok=True)
     (folder / "stock_research.json").write_text(json.dumps(output, indent=2))
@@ -174,7 +180,7 @@ def main():
     (folder / "stock_research.md").write_text("\n".join(lines))
     print("Stock research complete:", {k: v["status"] for k, v in output["symbols"].items()})
     if not output["data_quality_passed"]:
-        raise RuntimeError("Stock data-quality gate failed: fewer than 3 usable symbols")
+        raise RuntimeError("Stock data-quality gate failed: fewer than 75% of requested symbols usable")
 
 
 if __name__ == "__main__":
